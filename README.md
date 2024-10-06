@@ -18,6 +18,7 @@
     - [Run the Docker Container](#run-the-docker-container)
 - [Inference Device Selection (CPU/GPU)](#inference-device-selection-cpugpu)
 - [Testing the API](#testing-the-api)
+  - [Visualization of Detection Results](#visualization-of-detection-results)
 - [API Documentation](#api-documentation)
 - [Examples](#examples)
 - [Troubleshooting](#troubleshooting)
@@ -46,6 +47,7 @@ This project provides a FastAPI application that wraps a YOLOv9 model for object
 - **Swagger UI**: Automatically generated API documentation available at `/docs`.
 - **Customizable**: Easy to extend and modify for different use cases.
 - **Automated Testing**: Includes test scripts to verify the API functionality.
+- **Visualization Option**: Ability to visualize detection results in test scripts, controlled via configuration.
 
 ---
 
@@ -57,13 +59,14 @@ This project provides a FastAPI application that wraps a YOLOv9 model for object
 - **Docker** (optional, for containerized deployment)
 - **NVIDIA Docker Toolkit** (optional, for GPU support in Docker)
 - **PyTorch** (ensure compatibility with your CUDA version if using GPU)
+- **OpenCV** (for visualization, included in `requirements.txt`)
 
 ---
 
 ## Project Structure
 
 ```plaintext
-your_project/
+yolov9-fastapi-app/
 ├── main.py                # FastAPI application code
 ├── config.yaml            # Configuration file
 ├── requirements.txt       # Python dependencies
@@ -72,7 +75,8 @@ your_project/
 │   └── best.pt            # YOLOv9 weights file
 ├── yolov9/                # Cloned YOLOv9 repository
 ├── examples/              # Directory for example images
-├── test_api.py            # Test script for the API
+├── output/                # Directory for output images (visualizations)
+├── test_api.py            # Test script for the API with visualization option
 ├── test_api_unittest.py   # Unit test script for the API
 └── README.md              # Project documentation (this file)
 ```
@@ -131,26 +135,19 @@ Edit the `config.yaml` file to configure the application:
 ```yaml
 # config.yaml
 
-yolo_weights_path: 'weights/best.pt'      # Path to your YOLOv9 weights file
-device: 'auto'                            # Options: 'auto', 'cuda', 'cpu'
-img_size: 640                             # Image size for inference
-confidence_threshold: 0.25                # Confidence threshold for detections
-iou_threshold: 0.45                       # IoU threshold for NMS
-classes: null                             # Filter by class indices, e.g., [0, 1, 2]
-agnostic_nms: false                       # Class-agnostic NMS
+yolo_weights_path: 'weights/best.pt'        # Path to your YOLOv9 weights file
+device: 'auto'                              # Options: 'auto', 'cuda', 'cpu'
+img_size: 640                               # Image size for inference
+confidence_threshold: 0.25                  # Confidence threshold for detections
+iou_threshold: 0.45                         # IoU threshold for NMS
+classes: null                               # Filter by class indices, e.g., [0, 1, 2]
+agnostic_nms: false                         # Class-agnostic NMS
 test_image_path: 'examples/test_image.jpg'  # Path to the test image
 api_url: 'http://localhost:8000/predict'    # API endpoint URL
+visualize: false                            # Set to true to enable visualization
 ```
 
-- **`yolo_weights_path`**: Ensure this path points to your YOLOv9 weights file (`.pt` file). Place your trained weights in the `weights/` directory.
-- **`device`**: Set to `'auto'` to automatically select GPU if available, or specify `'cuda'` or `'cpu'`.
-- **`img_size`**: Adjust the image size as per your model's requirements.
-- **`confidence_threshold`**: Adjust the confidence threshold for filtering weak detections.
-- **`iou_threshold`**: Adjust the Intersection over Union (IoU) threshold for Non-Max Suppression.
-- **`classes`**: Specify class indices to filter detections (e.g., `[0, 1, 2]`), or set to `null` to detect all classes.
-- **`agnostic_nms`**: Set to `true` to perform class-agnostic NMS.
-- **`test_image_path`**: Path to the image used in test scripts.
-- **`api_url`**: URL of the API endpoint used in test scripts.
+- **`visualize`**: Controls whether to display and save visualization of detection results in test scripts. Set to `false` by default.
 
 ---
 
@@ -229,18 +226,52 @@ docker run --gpus all -d -p 8000:8000 yolov9-fastapi:gpu
 
 ### Test Script (`test_api.py`)
 
-A test script is provided to verify the API functionality. The script reads the image path and API URL from the `config.yaml` file.
+A test script is provided to verify the API functionality. The script reads the image path and API URL from the `config.yaml` file and can visualize detection results based on the `visualize` configuration option.
 
 **Instructions:**
 
 1. Ensure your FastAPI application is running.
-2. Run the test script:
+2. Set `visualize` in `config.yaml`:
+
+   - To enable visualization:
+
+     ```yaml
+     visualize: true
+     ```
+
+   - To disable visualization:
+
+     ```yaml
+     visualize: false
+     ```
+
+3. Run the test script:
 
    ```bash
    python test_api.py
    ```
 
+**Visualization Output:**
+
+- When `visualize` is set to `true`, the script will:
+
+  - Display the image with detection results in a window.
+  - Save the visualized image to `output/result.jpg`.
+
+- When `visualize` is set to `false`, the script will only print the API response without displaying or saving images.
+
 **Note:** Make sure the `test_image_path` and `api_url` in `config.yaml` are correctly set.
+
+### Visualization of Detection Results
+
+- **Enabling Visualization:**
+  - Open `config.yaml` and set `visualize: true`.
+  - Run `python test_api.py`.
+  - The script will display and save the image with detection results.
+- **Disabling Visualization:**
+  - Set `visualize: false` in `config.yaml`.
+  - Run `python test_api.py`.
+  - The script will only output the API response.
 
 ### Unit Test Script (`test_api_unittest.py`)
 
@@ -255,7 +286,7 @@ A unit test script using the `unittest` framework is also provided. It reads con
    python -m unittest test_api_unittest.py
    ```
 
-**Note:** Ensure the `test_image_path` and `api_url` in `config.yaml` are correctly set.
+**Note:** The unit test script does not include visualization to keep tests automated and non-interactive.
 
 ---
 
@@ -292,13 +323,21 @@ curl -X POST "http://localhost:8000/predict" -F "file=@examples/test_image.jpg"
 3. Add a key named `file` of type `File` and select the image you want to test.
 4. Send the request and view the response.
 
-### Example 3: Visualizing Results
+### Example 3: Visualizing Results in Test Script
 
-To visualize the detection results on the image:
+- Enable visualization in `config.yaml`:
 
-1. Modify `main.py` to include code that saves the image with bounding boxes.
-2. Use OpenCV or Matplotlib to draw rectangles and class labels on the image.
-3. Save or return the image as part of the API response (adjust the response accordingly).
+  ```yaml
+  visualize: true
+  ```
+
+- Run the test script:
+
+  ```bash
+  python test_api.py
+  ```
+
+- The script will display the image with bounding boxes and save it to `output/result.jpg`.
 
 ---
 
@@ -336,6 +375,11 @@ To visualize the detection results on the image:
 
   Check the application logs for detailed error messages. Logs are printed to the console and can help diagnose issues.
 
+- **Visualization Issues:**
+
+  - If the visualization window does not appear, ensure that you are not running the script in a headless environment.
+  - For servers without a GUI, consider disabling the display code or running the script locally.
+
 ---
 
 ## Contributing
@@ -361,6 +405,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## Acknowledgments
 
 - **YOLOv9 Repository:** [WongKinYiu/yolov9](https://github.com/WongKinYiu/yolov9)
+- **YOLOv9 Paper:** [YOLOv9: Scaling Up Yolo for Better Performance](https://arxiv.org/abs/2402.13616)
 - **FastAPI Framework:** [FastAPI](https://fastapi.tiangolo.com/)
 - **PyTorch:** [PyTorch](https://pytorch.org/)
 - **Uvicorn:** [Uvicorn](https://www.uvicorn.org/)
@@ -379,9 +424,9 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Contact
 
-If you have any questions or need further assistance, feel free to contact:
+If you have any questions or need further assistance, feel free to:
 
-- **GitHub Issues:** [https://github.com/mahmouddaif/yolov9-fastapi-app/issues](https://github.com/mahmouddaif/yolov9-fastapi-app/issues)
+- **Open an Issue:** [https://github.com/mahmouddaif/yolov9-fastapi-app/issues](https://github.com/mahmouddaif/yolov9-fastapi-app/issues)
 
 ---
 

@@ -86,8 +86,8 @@ your_project/
 Clone this repository to your local machine:
 
 ```bash
-git clone https://github.com/your_username/your_repository.git
-cd your_repository
+git clone https://github.com/mahmouddaif/yolov9-fastapi-app.git
+cd yolov9-fastapi-app
 ```
 
 ### 2. Set Up the Environment

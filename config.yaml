@@ -1,0 +1,11 @@
+# config.yaml
+
+yolo_weights_path: 'weights/best.pt'
+device: 'auto'  # Options: 'auto', 'cuda', 'cpu'
+img_size: 640
+confidence_threshold: 0.25
+iou_threshold: 0.45
+classes: null  # List of class indices to filter, e.g., [0, 1, 2]
+agnostic_nms: false
+test_image_path: 'examples/test_image.jpg'  # Path to the test image
+api_url: 'http://localhost:8000/predict'        # API endpoint URL

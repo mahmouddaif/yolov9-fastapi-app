@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+torch
+numpy
+opencv-python
+PyYAML
+requests

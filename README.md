@@ -381,8 +381,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 If you have any questions or need further assistance, feel free to contact:
 
-- **Email:** your_email@example.com
-- **GitHub Issues:** [https://github.com/your_username/your_repository/issues](https://github.com/your_username/your_repository/issues)
+- **GitHub Issues:** [https://github.com/mahmouddaif/yolov9-fastapi-app/issues](https://github.com/mahmouddaif/yolov9-fastapi-app/issues)
 
 ---
 

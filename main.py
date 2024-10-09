@@ -40,7 +40,7 @@ class YOLOv9Model:
 
     def load_model(self, weights_path: str):
         logging.info(f"Loading YOLOv9 model from {weights_path} on device {self.device}")
-        model = attempt_load(weights_path, map_location=self.device)
+        model = attempt_load(weights_path, device=self.device)
         model.to(self.device)
         model.eval()
         logging.info("Model loaded successfully")

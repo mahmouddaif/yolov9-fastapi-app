@@ -34,11 +34,14 @@
 
 This project provides a FastAPI application that wraps a YOLOv9 model for object detection inference. It allows users to perform object detection on images via a RESTful API. The application supports both CPU and GPU inference and can be easily deployed using Docker.
 
+**New Feature:** The API now supports batch inference, allowing multiple images to be processed in a single request.
+
 ---
 
 ## Features
 
 - **Object Detection API**: Exposes a `/predict` endpoint for image inference.
+- **Batch Inference Support**: Allows multiple images to be processed in a single request.
 - **Flexible Device Usage**: Supports inference on both CPU and GPU.
 - **Configuration Management**: Uses a `config.yaml` file for easy configuration.
 - **Dockerized Deployment**: Provides Dockerfiles for containerization.
@@ -135,18 +138,22 @@ Edit the `config.yaml` file to configure the application:
 ```yaml
 # config.yaml
 
-yolo_weights_path: 'weights/best.pt'        # Path to your YOLOv9 weights file
-device: 'auto'                              # Options: 'auto', 'cuda', 'cpu'
-img_size: 640                               # Image size for inference
-confidence_threshold: 0.25                  # Confidence threshold for detections
-iou_threshold: 0.45                         # IoU threshold for NMS
-classes: null                               # Filter by class indices, e.g., [0, 1, 2]
-agnostic_nms: false                         # Class-agnostic NMS
-test_image_path: 'examples/test_image.jpg'  # Path to the test image
-api_url: 'http://localhost:8000/predict'    # API endpoint URL
-visualize: false                            # Set to true to enable visualization
+yolo_weights_path: 'weights/best.pt'          # Path to your YOLOv9 weights file
+device: 'auto'                                # Options: 'auto', 'cuda', 'cpu'
+img_size: 640                                 # Image size for inference
+confidence_threshold: 0.25                    # Confidence threshold for detections
+iou_threshold: 0.45                           # IoU threshold for NMS
+classes: null                                 # Filter by class indices, e.g., [0, 1, 2]
+agnostic_nms: false                           # Class-agnostic NMS
+test_image_paths:                             # Paths to test images for batch inference
+  - 'examples/test_image1.jpg'
+  - 'examples/test_image2.jpg'
+  - 'examples/test_image3.jpg'
+api_url: 'http://localhost:8000/predict'      # API endpoint URL
+visualize: false                              # Set to true to enable visualization
 ```
 
+- **`test_image_paths`**: List of image paths for testing batch inference.
 - **`visualize`**: Controls whether to display and save visualization of detection results in test scripts. Set to `false` by default.
 
 ---
@@ -226,7 +233,7 @@ docker run --gpus all -d -p 8000:8000 yolov9-fastapi:gpu
 
 ### Test Script (`test_api.py`)
 
-A test script is provided to verify the API functionality. The script reads the image path and API URL from the `config.yaml` file and can visualize detection results based on the `visualize` configuration option.
+A test script is provided to verify the API functionality. The script reads image paths and the API URL from the `config.yaml` file and can visualize detection results based on the `visualize` configuration option.
 
 **Instructions:**
 
@@ -245,7 +252,16 @@ A test script is provided to verify the API functionality. The script reads the 
      visualize: false
      ```
 
-3. Run the test script:
+3. Specify test image paths in `config.yaml`:
+
+   ```yaml
+   test_image_paths:
+     - 'examples/test_image1.jpg'
+     - 'examples/test_image2.jpg'
+     - 'examples/test_image3.jpg'
+   ```
+
+4. Run the test script:
 
    ```bash
    python test_api.py
@@ -255,19 +271,19 @@ A test script is provided to verify the API functionality. The script reads the 
 
 - When `visualize` is set to `true`, the script will:
 
-  - Display the image with detection results in a window.
-  - Save the visualized image to `output/result.jpg`.
+  - Display each image with detection results in a window.
+  - Save the visualized images to the `output/` directory with their original filenames.
 
 - When `visualize` is set to `false`, the script will only print the API response without displaying or saving images.
 
-**Note:** Make sure the `test_image_path` and `api_url` in `config.yaml` are correctly set.
+**Note:** Ensure the `test_image_paths` and `api_url` in `config.yaml` are correctly set.
 
 ### Visualization of Detection Results
 
 - **Enabling Visualization:**
   - Open `config.yaml` and set `visualize: true`.
   - Run `python test_api.py`.
-  - The script will display and save the image with detection results.
+  - The script will display and save the images with detection results.
 - **Disabling Visualization:**
   - Set `visualize: false` in `config.yaml`.
   - Run `python test_api.py`.
@@ -275,12 +291,20 @@ A test script is provided to verify the API functionality. The script reads the 
 
 ### Unit Test Script (`test_api_unittest.py`)
 
-A unit test script using the `unittest` framework is also provided. It reads configuration from the `config.yaml` file.
+A unit test script using the `unittest` framework is also provided. It reads configuration from the `config.yaml` file and tests the batch inference functionality.
 
 **Instructions:**
 
 1. Ensure your FastAPI application is running.
-2. Run the unit test script:
+2. Specify test image paths in `config.yaml`:
+
+   ```yaml
+   test_image_paths:
+     - 'examples/test_image1.jpg'
+     - 'examples/test_image2.jpg'
+   ```
+
+3. Run the unit test script:
 
    ```bash
    python -m unittest test_api_unittest.py
@@ -292,7 +316,7 @@ A unit test script using the `unittest` framework is also provided. It reads con
 
 ## API Documentation
 
-FastAPI provides an interactive API documentation available at `http://localhost:8000/docs`. You can use this interface to test the `/predict` endpoint and view the API schema.
+FastAPI provides interactive API documentation available at `http://localhost:8000/docs`. You can use this interface to test the `/predict` endpoint and view the API schema.
 
 ---
 
@@ -300,27 +324,42 @@ FastAPI provides an interactive API documentation available at `http://localhost
 
 Below are some examples of how to use the API.
 
-### Example 1: Detect Objects in an Image
+### Example 1: Batch Inference with Multiple Images
 
 ```bash
-curl -X POST "http://localhost:8000/predict" -F "file=@examples/test_image.jpg"
+curl -X POST "http://localhost:8000/predict" \
+-F "files=@examples/test_image1.jpg" \
+-F "files=@examples/test_image2.jpg" \
+-F "files=@examples/test_image3.jpg"
 ```
 
 **Response:**
 
 ```json
-{
-  "boxes": [[34, 50, 200, 300], [150, 80, 400, 350]],
-  "class_ids": [0, 1],
-  "confidences": [0.85, 0.78]
-}
+[
+  {
+    "boxes": [[34, 50, 200, 300]],
+    "class_ids": [0],
+    "confidences": [0.85]
+  },
+  {
+    "boxes": [[150, 80, 400, 350]],
+    "class_ids": [1],
+    "confidences": [0.78]
+  },
+  {
+    "boxes": [],
+    "class_ids": [],
+    "confidences": []
+  }
+]
 ```
 
-### Example 2: Using Postman
+### Example 2: Using Postman for Batch Inference
 
 1. Open Postman and create a new `POST` request to `http://localhost:8000/predict`.
 2. Under the `Body` tab, select `form-data`.
-3. Add a key named `file` of type `File` and select the image you want to test.
+3. Add multiple keys named `files` of type `File` and select the images you want to test.
 4. Send the request and view the response.
 
 ### Example 3: Visualizing Results in Test Script
@@ -337,7 +376,7 @@ curl -X POST "http://localhost:8000/predict" -F "file=@examples/test_image.jpg"
   python test_api.py
   ```
 
-- The script will display the image with bounding boxes and save it to `output/result.jpg`.
+- The script will display each image with bounding boxes and save them to the `output/` directory.
 
 ---
 
@@ -345,7 +384,7 @@ curl -X POST "http://localhost:8000/predict" -F "file=@examples/test_image.jpg"
 
 - **Invalid Image Error:**
 
-  Ensure that the image you're sending is valid and in a supported format (e.g., JPEG, PNG). The image should not be corrupted.
+  Ensure that the images you're sending are valid and in supported formats (e.g., JPEG, PNG). The images should not be corrupted.
 
 - **ModuleNotFoundError:**
 

@@ -3,6 +3,7 @@
 import unittest
 import requests
 import yaml
+import os
 
 # Load configuration from config.yaml
 try:
@@ -18,21 +19,39 @@ except yaml.YAMLError as e:
 
 class TestYOLOv9API(unittest.TestCase):
     API_URL = config.get('api_url', 'http://localhost:8000/predict')
-    IMAGE_PATH = config.get('test_image_path', 'path_to_your_test_image.jpg')
+    IMAGE_PATHS = config.get('test_image_paths', ['path_to_your_test_image1.jpg', 'path_to_your_test_image2.jpg'])
 
     def test_predict_endpoint(self):
-        with open(self.IMAGE_PATH, 'rb') as image_file:
-            files = {'file': image_file}
-            response = requests.post(self.API_URL, files=files)
+        files = []
+        for image_path in self.IMAGE_PATHS:
+            if not os.path.exists(image_path):
+                self.fail(f"Image file '{image_path}' not found.")
+            files.append(('files', open(image_path, 'rb')))
+
+        response = requests.post(self.API_URL, files=files)
+
+        # Close the files to release resources
+        for _, file in files:
+            file.close()
 
         self.assertEqual(response.status_code, 200, f"Expected status code 200, got {response.status_code}")
+
         data = response.json()
-        self.assertIn('boxes', data, "Response JSON does not contain 'boxes'")
-        self.assertIn('class_ids', data, "Response JSON does not contain 'class_ids'")
-        self.assertIn('confidences', data, "Response JSON does not contain 'confidences'")
-        self.assertIsInstance(data['boxes'], list, "'boxes' is not a list")
-        self.assertIsInstance(data['class_ids'], list, "'class_ids' is not a list")
-        self.assertIsInstance(data['confidences'], list, "'confidences' is not a list")
+
+        # Assert that the response is a list
+        self.assertIsInstance(data, list, "Response is not a list")
+
+        # Assert that the number of results matches the number of images sent
+        self.assertEqual(len(data), len(self.IMAGE_PATHS), "Number of results does not match number of images sent")
+
+        # For each result, perform assertions
+        for idx, result in enumerate(data):
+            self.assertIn('boxes', result, f"Result for image {idx} does not contain 'boxes'")
+            self.assertIn('class_ids', result, f"Result for image {idx} does not contain 'class_ids'")
+            self.assertIn('confidences', result, f"Result for image {idx} does not contain 'confidences'")
+            self.assertIsInstance(result['boxes'], list, f"'boxes' for image {idx} is not a list")
+            self.assertIsInstance(result['class_ids'], list, f"'class_ids' for image {idx} is not a list")
+            self.assertIsInstance(result['confidences'], list, f"'confidences' for image {idx} is not a list")
 
 if __name__ == '__main__':
     unittest.main()

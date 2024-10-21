@@ -1,6 +1,6 @@
 # main.py
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 import uvicorn
 import torch
@@ -10,11 +10,12 @@ import sys
 import os
 import yaml
 import logging
+from typing import List
 
 # Adjust sys.path if yolov9 is not in your PYTHONPATH
 sys.path.append('./yolov9')
 
-# Import YOLO utilities (adjust if using a different YOLO version)
+# Import YOLO utilities
 try:
     from models.experimental import attempt_load
     from utils.general import non_max_suppression, scale_boxes
@@ -46,27 +47,29 @@ class YOLOv9Model:
         logging.info("Model loaded successfully")
         return model
 
-    def preprocess_image(self, image: np.ndarray) -> torch.Tensor:
-        logging.debug("Preprocessing image")
-        img = letterbox(image, self.img_size, stride=32, auto=False)[0]
-        img = img.transpose(2, 0, 1)  # HWC to CHW
-        img = np.ascontiguousarray(img)
-        img_tensor = torch.from_numpy(img).to(self.device)
+    def preprocess_images(self, images: List[np.ndarray]) -> torch.Tensor:
+        logging.debug("Preprocessing images")
+        processed_images = []
+        for image in images:
+            img = letterbox(image, self.img_size, stride=32, auto=False)[0]
+            img = img.transpose(2, 0, 1)  # HWC to CHW
+            img = np.ascontiguousarray(img)
+            processed_images.append(img)
+        img_tensor = np.stack(processed_images)
+        img_tensor = torch.from_numpy(img_tensor).to(self.device)
         img_tensor = img_tensor.float()
         img_tensor /= 255.0  # Normalize to [0,1]
-        if img_tensor.ndimension() == 3:
-            img_tensor = img_tensor.unsqueeze(0)
-        logging.debug("Image preprocessed successfully")
+        logging.debug("Images preprocessed successfully")
         return img_tensor
 
     def predict(self, img_tensor: torch.Tensor):
         logging.debug("Running inference")
         with torch.no_grad():
-            pred = self.model(img_tensor)[0]
+            pred = self.model(img_tensor)
         logging.debug("Inference completed")
         return pred
 
-    def postprocess(self, predictions, img_tensor_shape, original_shape):
+    def postprocess(self, predictions, img_tensor_shape, original_shapes):
         logging.debug("Postprocessing predictions")
         # Apply NMS
         predictions = non_max_suppression(
@@ -76,20 +79,22 @@ class YOLOv9Model:
             classes=self.classes,
             agnostic=self.agnostic_nms
         )
-        boxes = []
-        class_ids = []
-        confidences = []
-        for det in predictions:  # detections per image
-            if len(det):
+        results = []
+        for i, det in enumerate(predictions):  # Detections per image
+            boxes = []
+            class_ids = []
+            confidences = []
+            if det is not None and len(det):
                 # Rescale boxes from model input size to original image size
-                det[:, :4] = scale_boxes(img_tensor_shape[2:], det[:, :4], original_shape)
+                det[:, :4] = scale_boxes(img_tensor_shape[2:], det[:, :4], original_shapes[i])
                 for *xyxy, conf, cls in reversed(det):
                     xmin, ymin, xmax, ymax = map(int, xyxy)
                     boxes.append([xmin, ymin, xmax, ymax])
                     class_ids.append(int(cls))
                     confidences.append(float(conf))
+            results.append({'boxes': boxes, 'class_ids': class_ids, 'confidences': confidences})
         logging.debug("Postprocessing completed")
-        return boxes, class_ids, confidences
+        return results
 
 # Initialize logging
 logging.basicConfig(
@@ -123,33 +128,37 @@ except Exception as e:
     exit(1)
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict(files: List[UploadFile] = File(...)):
     try:
-        # Read image data
-        image_data = await file.read()
-        # Convert image data to numpy array
-        nparr = np.frombuffer(image_data, np.uint8)
-        # Decode image
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img is None:
-            logging.error("Invalid image data")
-            return JSONResponse(content={"error": "Invalid image"}, status_code=400)
-        # Convert BGR to RGB
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        original_shape = img_rgb.shape[:2]  # Height, Width
+        images = []
+        original_shapes = []
+        for file in files:
+            image_data = await file.read()
+            # Convert image data to numpy array
+            nparr = np.frombuffer(image_data, np.uint8)
+            # Decode image
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img is None:
+                logging.error(f"Invalid image data in file {file.filename}")
+                raise HTTPException(status_code=400, detail=f"Invalid image {file.filename}")
+            # Convert BGR to RGB
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            images.append(img_rgb)
+            original_shapes.append(img_rgb.shape[:2])  # Height, Width
 
-        # Preprocess image
-        img_tensor = yolo_model.preprocess_image(img_rgb)
+        # Preprocess images
+        img_tensors = yolo_model.preprocess_images(images)
 
         # Inference
-        predictions = yolo_model.predict(img_tensor)
+        predictions = yolo_model.predict(img_tensors)
 
         # Postprocess
-        boxes, class_ids, confidences = yolo_model.postprocess(predictions, img_tensor.shape, original_shape)
+        results = yolo_model.postprocess(predictions, img_tensors.shape, original_shapes)
 
         # Return the results as JSON
-        results = {'boxes': boxes, 'class_ids': class_ids, 'confidences': confidences}
-        return JSONResponse(content=results)
+        return results
+    except HTTPException as http_exc:
+        return JSONResponse(content={"error": http_exc.detail}, status_code=http_exc.status_code)
     except Exception as e:
         logging.error(f"Error during prediction: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
